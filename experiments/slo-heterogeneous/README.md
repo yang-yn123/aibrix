@@ -60,7 +60,8 @@ exact start/limit pairs produce the 2x2 request-size matrix without adding
 unrequested intermediate sizes:
 
 ```bash
-/opt/aibrix-profiling-venv/bin/aibrix_benchmark \
+PATH=/opt/aibrix-profiling-venv/bin:$PATH \
+  /opt/aibrix-profiling-venv/bin/aibrix_benchmark \
   --model qwen2-5-7b-instruct \
   --output "$RUN_DIR/l20.jsonl" \
   --input-start 128 --input-limit 128 \
@@ -73,6 +74,11 @@ new JSONL file. Repeat the complete process through the A10-specific Service.
 The official script sends 100 requests at each point and doubles request rate
 from the configured start to limit.
 
+The `PATH` prefix is required in this environment because the official shell
+entry point invokes `python` internally. Without it, the wrapper currently
+exits zero after printing `python: command not found` and produces no JSONL.
+Always validate the expected five JSON records per request-rate point.
+
 After reviewing the baseline curves and choosing an SLO, generate one profile
 per Kubernetes deployment and store it in AIBrix Redis:
 
@@ -80,7 +86,7 @@ per Kubernetes deployment and store it in AIBrix Redis:
 /opt/aibrix-profiling-venv/bin/aibrix_gen_profile \
   qwen2-5-7b-instruct-l20 \
   --benchmark "$RUN_DIR/l20.jsonl" \
-  --percentile 99 --ttft TTFT_SECONDS --tpot TPOT_SECONDS \
+  --percentile 99 --e2e E2E_SECONDS \
   --cost L20_RELATIVE_COST \
   -o 'redis://127.0.0.1:6379/?model=qwen2-5-7b-instruct'
 ```
@@ -88,3 +94,80 @@ per Kubernetes deployment and store it in AIBrix Redis:
 Use a local port-forward from `aibrix-redis-master` to `127.0.0.1:6379`, then
 repeat with deployment `qwen2-5-7b-instruct-a10` and its benchmark/cost. Keep
 the raw benchmark JSONL immutable after profile generation.
+
+Generate distinct, versioned profiles when testing E2E, TTFT, and TPOT SLOs.
+The Router prioritizes TPOT, then TTFT, TPAT, and E2E if several targets are
+present in one profile. For TPOT, the pinned Router compares measured mean E2E
+with `TPOT * output_tokens + optional TTFT`; the generated profile does not
+need a separate TPOT prediction matrix.
+
+## Phase B baseline result (2026-09-14)
+
+Formal runs used the dedicated L20/A10 Services, seed 0, temperature 0, 100
+requests per point, and offered rates 1, 2, 4, 8, 16, 32, and 64 req/s. Low-rate
+0.5 req/s refinements were added where the first formal point was at or near
+capacity. Raw JSONL files are immutable and remain outside Git.
+
+| GPU | ECC | 128/64 | 2048/64 | 128/512 | 2048/512 |
+|---|---|---:|---:|---:|---:|
+| L20 | Enabled | 8 | 2 | 1 | 0.5 |
+| A10 | Disabled | 4 | 1 | 0.5 | 0.5 |
+
+Values are the highest sampled offered rates where achieved throughput was at
+least 90% of offered throughput. The profile's measured capacity values are in
+`profiles/phase-c-validation-*.json` and are not rounded to these display
+values.
+
+The data-derived p99 E2E SLOs, in seconds, are:
+
+| Tier | 128/64 | 2048/64 | 128/512 | 2048/512 |
+|---|---:|---:|---:|---:|
+| strict | 1.6 | 5.0 | 12.0 | 18.0 |
+| critical | 2.2 | 6.0 | 16.0 | 31.5 |
+| loose | 2.5 | 10.0 | 17.0 | 35.0 |
+
+The target is model-wide in the AIBrix profile schema, so core experiments
+must load a versioned profile for the request class and tier under test. The
+initial Phase C load validation used p99 E2E = 35 seconds to ensure all four
+request classes had a nonzero stable-capacity entry.
+
+Remote raw and monitoring directories on the control node:
+
+```text
+/opt/aibrix-experiment/results/20260914T034000Z  L20 main grid
+/opt/aibrix-experiment/results/20260914T040853Z  A10 main grid
+/opt/aibrix-experiment/results/20260914T045801Z  L20 2048/512 at 0.5 req/s
+/opt/aibrix-experiment/results/20260914T050149Z  A10 long-output refinements
+/opt/aibrix-experiment/results/20260914T051052Z  L20 128/512 at 0.5 req/s
+/opt/aibrix-experiment/results/20260914T051434Z  A10 2048/64 at 0.5 req/s
+```
+
+Each directory contains parameters, timestamps, SHA256, vLLM and AIBrix logs,
+and a Prometheus range export covering vLLM, DCGM, node-exporter, AIBrix, and
+Envoy jobs. All 25 Prometheus targets were up during the main runs.
+The pre-existing `registry-proxy-test` Pod remains in `Unknown` state and was
+not deleted; it is not selected by either inference Service or any monitor.
+
+## Phase C profile load validation
+
+Official `aibrix_gen_profile` generated both deployment profiles from derived
+merged benchmark inputs and wrote these exact Redis keys:
+
+```text
+aibrix:profile_qwen2-5-7b-instruct_qwen2-5-7b-instruct-l20
+aibrix:profile_qwen2-5-7b-instruct_qwen2-5-7b-instruct-a10
+```
+
+Generation artifacts and Redis before/after snapshots are under
+`/opt/aibrix-experiment/profiles/20260914T051935Z`. Gateway requests with
+`routing-strategy: slo` returned 200 and emitted no missing-profile, SLO-info,
+or FIFO fallback warning. A staggered eight-request validation increased L20
+outstanding requests from 1 to 8 but still selected L20 for every request. This
+is only a path-validation observation: with `queueOverallSLO=false`, current
+deployment queue time is not part of profile ranking. It is not a core Router
+experiment result.
+
+The deployed Gateway generates its own request ID instead of preserving the
+client `X-Request-Id`; correlate using the response completion ID and Gateway
+`request_start`/`request_end` records until collection tooling adds an explicit
+experiment ID mapping.

@@ -1,0 +1,26 @@
+# Derived from the 2026-09-14 p99 baseline curves. Times are seconds.
+metric: E2E
+percentile: 99
+request_classes:
+  128x64:
+    strict: 1.6
+    critical: 2.2
+    loose: 2.5
+  2048x64:
+    strict: 5.0
+    critical: 6.0
+    loose: 10.0
+  128x512:
+    strict: 12.0
+    critical: 16.0
+    loose: 17.0
+  2048x512:
+    strict: 18.0
+    critical: 31.5
+    loose: 35.0
+
+phase_c_validation:
+  e2e: 35.0
+  percentile: 99
+  l20_cost: 1.0
+  a10_cost: 1.0
