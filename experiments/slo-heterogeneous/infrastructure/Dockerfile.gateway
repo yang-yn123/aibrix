@@ -1,0 +1,68 @@
+ARG BUILDER_IMAGE=docker.io/library/golang:1.22@sha256:1cf6c45ba39db9fd6db16922041d074a63c935556a05c5ccb62d181034df7f02
+ARG RUNTIME_IMAGE=gcr.m.daocloud.io/distroless/base-debian12:nonroot@sha256:7f0c72cd138b442ae0deeb69c08b1acf5525439ba251a49ad93c320a061567e5
+ARG TARGETPLATFORM
+
+FROM ${BUILDER_IMAGE} AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+
+RUN sed -i \
+    -e 's|http://deb.debian.org/debian-security|https://mirrors.aliyun.com/debian-security|g' \
+    -e 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
+    /etc/apt/sources.list.d/debian.sources
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    pkg-config \
+    libkrb5-dev \
+    libzmq3-dev \
+    libsodium-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+ENV GOPROXY=https://goproxy.cn,direct
+
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    go mod download
+
+COPY cmd/ cmd/
+COPY api/ api/
+COPY pkg/ pkg/
+
+ENV CGO_ENABLED=1
+ENV CGO_LDFLAGS="-lzmq -lsodium -lpthread -lm -lstdc++"
+
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -tags=zmq \
+    -ldflags="-s -w -linkmode=external -extldflags '${CGO_LDFLAGS}'" \
+    -o gateway-plugins ./cmd/plugins
+
+RUN set -eux; \
+    mkdir -p /workspace/deps; \
+    ldd /workspace/gateway-plugins \
+      | tr -s '[:blank:]' '\n' \
+      | grep '^/' \
+      | sort -u \
+      | xargs -r -I{} cp -v {} /workspace/deps/
+
+FROM ${RUNTIME_IMAGE}
+ARG SOURCE_COMMIT
+LABEL org.opencontainers.image.revision=${SOURCE_COMMIT}
+WORKDIR /
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /workspace/gateway-plugins .
+COPY --from=builder /workspace/deps /gateway-plugins-lib
+ENV LD_LIBRARY_PATH=/gateway-plugins-lib
+USER 65532:65532
+
+ENTRYPOINT ["/gateway-plugins"]

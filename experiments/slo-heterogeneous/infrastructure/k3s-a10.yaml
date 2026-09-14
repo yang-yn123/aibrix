@@ -1,0 +1,4 @@
+node-name: aibrix-a10
+node-ip: 172.28.236.63
+flannel-iface: eth0
+disable-default-registry-endpoint: true

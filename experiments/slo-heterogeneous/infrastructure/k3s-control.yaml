@@ -1,0 +1,8 @@
+node-name: aibrix-control
+node-ip: 172.28.236.61
+advertise-address: 172.28.236.61
+flannel-iface: eth0
+write-kubeconfig-mode: "0600"
+disable:
+  - traefik
+disable-default-registry-endpoint: true

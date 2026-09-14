@@ -1,0 +1,269 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen2-5-7b-instruct
+  namespace: default
+  labels:
+    model.aibrix.ai/name: qwen2-5-7b-instruct
+    prometheus-discovery: "true"
+spec:
+  selector:
+    model.aibrix.ai/name: qwen2-5-7b-instruct
+  ports:
+    - name: metrics
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen2-5-7b-instruct-l20
+  namespace: default
+spec:
+  selector:
+    app: qwen2-5-7b-instruct-l20
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen2-5-7b-instruct-a10
+  namespace: default
+spec:
+  selector:
+    app: qwen2-5-7b-instruct-a10
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen2-5-7b-instruct-l20
+  namespace: default
+  labels:
+    app: qwen2-5-7b-instruct-l20
+    model.aibrix.ai/name: qwen2-5-7b-instruct
+    model.aibrix.ai/port: "8000"
+    experiment.aibrix.ai/gpu-model: l20
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qwen2-5-7b-instruct-l20
+  template:
+    metadata:
+      labels:
+        app: qwen2-5-7b-instruct-l20
+        model.aibrix.ai/name: qwen2-5-7b-instruct
+        model.aibrix.ai/port: "8000"
+        experiment.aibrix.ai/gpu-model: l20
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+        prometheus.io/scrape: "true"
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        aibrix.ai/node-role: gpu
+        aibrix.ai/gpu-model: l20
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: present
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: vllm-openai
+          image: vllm/vllm-openai@sha256:607442e407b0fea97f8a132a78b787c121a996dd4de181fa08e8da06e71ec2db
+          imagePullPolicy: IfNotPresent
+          command:
+            - vllm
+            - serve
+            - /models/Qwen2.5-7B-Instruct
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --served-model-name
+            - qwen2-5-7b-instruct
+            - --dtype
+            - half
+            - --tensor-parallel-size
+            - "1"
+            - --max-model-len
+            - "4096"
+            - --max-num-seqs
+            - "16"
+            - --gpu-memory-utilization
+            - "0.90"
+            - --no-enable-prefix-caching
+          env:
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "12"
+              memory: 48Gi
+              nvidia.com/gpu: "1"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 120
+            periodSeconds: 5
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          volumeMounts:
+            - name: model
+              mountPath: /models/Qwen2.5-7B-Instruct
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: model
+          hostPath:
+            path: /opt/models/Qwen2.5-7B-Instruct
+            type: Directory
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen2-5-7b-instruct-a10
+  namespace: default
+  labels:
+    app: qwen2-5-7b-instruct-a10
+    model.aibrix.ai/name: qwen2-5-7b-instruct
+    model.aibrix.ai/port: "8000"
+    experiment.aibrix.ai/gpu-model: a10
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qwen2-5-7b-instruct-a10
+  template:
+    metadata:
+      labels:
+        app: qwen2-5-7b-instruct-a10
+        model.aibrix.ai/name: qwen2-5-7b-instruct
+        model.aibrix.ai/port: "8000"
+        experiment.aibrix.ai/gpu-model: a10
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+        prometheus.io/scrape: "true"
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        aibrix.ai/node-role: gpu
+        aibrix.ai/gpu-model: a10
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: present
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: vllm-openai
+          image: vllm/vllm-openai@sha256:607442e407b0fea97f8a132a78b787c121a996dd4de181fa08e8da06e71ec2db
+          imagePullPolicy: IfNotPresent
+          command:
+            - vllm
+            - serve
+            - /models/Qwen2.5-7B-Instruct
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --served-model-name
+            - qwen2-5-7b-instruct
+            - --dtype
+            - half
+            - --tensor-parallel-size
+            - "1"
+            - --max-model-len
+            - "4096"
+            - --max-num-seqs
+            - "16"
+            - --gpu-memory-utilization
+            - "0.90"
+            - --no-enable-prefix-caching
+          env:
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "12"
+              memory: 48Gi
+              nvidia.com/gpu: "1"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 120
+            periodSeconds: 5
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          volumeMounts:
+            - name: model
+              mountPath: /models/Qwen2.5-7B-Instruct
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: model
+          hostPath:
+            path: /opt/models/Qwen2.5-7B-Instruct
+            type: Directory
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

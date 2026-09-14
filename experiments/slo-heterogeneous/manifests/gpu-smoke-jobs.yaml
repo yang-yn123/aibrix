@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke-l20
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: gpu-smoke
+        aibrix.ai/gpu-model: l20
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      nodeSelector:
+        aibrix.ai/gpu-model: l20
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: nvidia-smi
+          image: nvcr.io/nvidia/cuda:12.8.1-base-ubuntu22.04
+          command:
+            - nvidia-smi
+          args:
+            - --query-gpu=name,uuid,memory.total,driver_version
+            - --format=csv,noheader
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke-a10
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: gpu-smoke
+        aibrix.ai/gpu-model: a10
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      nodeSelector:
+        aibrix.ai/gpu-model: a10
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: nvidia-smi
+          image: nvcr.io/nvidia/cuda:12.8.1-base-ubuntu22.04
+          command:
+            - nvidia-smi
+          args:
+            - --query-gpu=name,uuid,memory.total,driver_version
+            - --format=csv,noheader
+          resources:
+            limits:
+              nvidia.com/gpu: "1"

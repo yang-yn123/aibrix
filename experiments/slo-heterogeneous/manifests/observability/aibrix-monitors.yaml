@@ -1,0 +1,98 @@
+# Derived from observability/monitor at AIBrix revision 7a7e7bb9.
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-admin-metrics
+  namespace: envoy-gateway-system
+  labels:
+    app.kubernetes.io/name: envoy
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/managed-by: envoy-gateway
+spec:
+  ports:
+    - name: metrics
+      port: 19001
+      targetPort: 19001
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: envoy
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/managed-by: envoy-gateway
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aibrix-controller-manager-metrics-monitor
+  namespace: aibrix-system
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    app.kubernetes.io/name: aibrix
+    app.kubernetes.io/version: nightly
+    control-plane: controller-manager
+spec:
+  endpoints:
+    - path: /metrics
+      port: http
+      scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: envoy-metrics-monitor
+  namespace: envoy-gateway-system
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: envoy
+  namespaceSelector:
+    matchNames:
+      - envoy-gateway-system
+  endpoints:
+    - port: metrics
+      path: /stats/prometheus
+      scheme: http
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gateway-plugin-metrics-monitor
+  namespace: aibrix-system
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gateway-plugins
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+  namespaceSelector:
+    matchNames:
+      - aibrix-system
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: qwen2-5-7b-instruct
+  namespace: default
+  labels:
+    release: prometheus
+spec:
+  endpoints:
+    - interval: 15s
+      path: /metrics
+      port: metrics
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      prometheus-discovery: "true"

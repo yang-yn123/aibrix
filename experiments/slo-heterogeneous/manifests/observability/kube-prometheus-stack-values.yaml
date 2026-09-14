@@ -1,0 +1,55 @@
+defaultRules:
+  create: false
+
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+prometheusOperator:
+  nodeSelector:
+    aibrix.ai/node-role: control
+
+kube-state-metrics:
+  nodeSelector:
+    aibrix.ai/node-role: control
+
+prometheus-node-exporter:
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      aibrix.ai/node-role: control
+    retention: 7d
+    serviceMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi

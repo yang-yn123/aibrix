@@ -1,0 +1,6 @@
+mirrors:
+  "docker.io":
+    endpoint:
+      - "https://docker.m.daocloud.io"
+      - "https://docker.1ms.run"
+      - "https://dockerproxy.net"
