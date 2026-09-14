@@ -6,6 +6,7 @@ Recorded on 2026-09-14 after the environment smoke test.
 
 - k3s: `v1.31.14+k3s1`
 - NVIDIA driver: `580.126.09`
+- GPU ECC at final environment check: L20 `Enabled`; A10 `Disabled`
 - NVIDIA Container Toolkit: `1.17.8-1`
 - NVIDIA device plugin: `v0.17.4`, runtime digest `sha256:3c54348fe5a57e5700e7d8068e7531d2ef2d5f3ccb70c8f6bac0953432527abd`
 - vLLM: `v0.10.2`, image index digest `sha256:607442e407b0fea97f8a132a78b787c121a996dd4de181fa08e8da06e71ec2db`
