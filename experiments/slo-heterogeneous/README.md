@@ -171,3 +171,52 @@ The deployed Gateway generates its own request ID instead of preserving the
 client `X-Request-Id`; correlate using the response completion ID and Gateway
 `request_start`/`request_end` records until collection tooling adds an explicit
 experiment ID mapping.
+
+## Phase D Gateway-visible RPS quick scan (2026-09-15)
+
+After restoring the A10 to the Phase B condition (ECC Disabled, 24,564 MiB),
+the official `aibrix_gen_profile` workflow reloaded the `(128,64)` critical
+p99 E2E profile. Reload artifacts are under:
+
+```text
+/opt/aibrix-experiment/profiles/20260915T014723Z-phase-d-quick-reload
+```
+
+The valid RPS scan sends background traffic through Gateway with
+`slo-least-load` and an L20 external filter. This passes through `SLOQueue`, so
+the output predictor is attached and `realtime_normalized_pendings` is updated;
+push-mode sub-routing prevents L20 background requests from waiting in the
+shared SLO queue. Probes use unfiltered `slo`. All background requests stayed
+on L20, and both fallback and load-consumption error counts were zero.
+
+This was a resource-saving quick scan: one round, seed 1201, 20 probes per
+point at 0.5 req/s, 8 seconds warmup, 2 seconds stabilization, and 55 seconds
+of background traffic. It is sufficient to locate the trend but does not
+replace the planned five full repetitions.
+
+| L20 load | Background RPS | Success | L20 | A10 | p50 E2E | p95 E2E | p99 E2E | p50 TTFT | p50 TPOT | SLO violation |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0% | 0.0 | 20/20 | 20 | 0 | 1.383s | 1.415s | 1.421s | 0.038s | 0.021s | 0% |
+| 20% | 1.6 | 20/20 | 20 | 0 | 1.420s | 1.464s | 1.469s | 0.041s | 0.022s | 0% |
+| 40% | 3.2 | 20/20 | 20 | 0 | 1.449s | 1.496s | 1.504s | 0.049s | 0.022s | 0% |
+| 60% | 4.8 | 20/20 | 18 | 2 | 1.484s | 1.848s | 1.848s | 0.052s | 0.023s | 0% |
+| 80% | 6.4 | 20/20 | 15 | 5 | 1.562s | 1.880s | 1.881s | 0.050s | 0.024s | 0% |
+| 95% | 7.6 | 20/20 | 10 | 10 | 1.735s | 1.893s | 1.897s | 0.053s | 0.027s | 0% |
+
+The A10 share increased from 0% at 0-40% L20 load to 10%, 25%, and 50% at
+60%, 80%, and 95%. This demonstrates dynamic use of Gateway-visible load in
+addition to the static heterogeneous profile. The exact expected-completion
+time crossing still requires matched forced-L20 and forced-A10 RPS replays.
+
+The valid result directory is:
+
+```text
+/opt/aibrix-experiment/results/20260915T021707Z-phase-d-l20-busy-gateway-visible-rps-quick-128x64
+```
+
+Two diagnostics must not be mixed into that result. The continuous scan under
+`20260915T015056Z-phase-d-l20-busy-visible-quick-128x64` used `least-request`,
+which logged `output predictor not set` and did not update normalized pending
+load. The burst scan under `20260915T020519Z-phase-d-visible-burst-switch-scan`
+validated the capacity mechanism with controlled in-flight requests, but its
+x-axis is concurrency rather than RPS.
